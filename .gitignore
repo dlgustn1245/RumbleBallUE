@@ -1,0 +1,16 @@
+# 언리얼 자동 생성 폴더
+Binaries/
+Intermediate/
+Saved/
+DerivedDataCache/
+
+# IDE (Rider, VS)
+.idea/
+.vs/
+*.sln
+*.suo
+*.VC.db
+*.DotSettings.user
+
+# RiderLink를 프로젝트에 설치한 경우 대비
+Plugins/Developer/RiderLink/
