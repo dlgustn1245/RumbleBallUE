@@ -1,125 +1,141 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "RumbleBallUEPlayerController.h"
-#include "GameFramework/Pawn.h"
-#include "Blueprint/AIBlueprintHelperLibrary.h"
-#include "NiagaraSystem.h"
-#include "NiagaraFunctionLibrary.h"
 #include "RumbleBallUECharacter.h"
-#include "Engine/World.h"
+#include "Camera/PlayerCameraManager.h"
 #include "EnhancedInputComponent.h"
-#include "InputActionValue.h"
 #include "EnhancedInputSubsystems.h"
+#include "InputActionValue.h"
+#include "InputMappingContext.h"
 #include "Engine/LocalPlayer.h"
 #include "RumbleBallUE.h"
 
 ARumbleBallUEPlayerController::ARumbleBallUEPlayerController()
 {
-	bIsTouch = false;
-	bMoveToMouseCursor = false;
-
-	// configure the controller
+	// 마우스 커서로 조준하므로 커서를 보인다
 	bShowMouseCursor = true;
 	DefaultMouseCursor = EMouseCursor::Default;
-	CachedDestination = FVector::ZeroVector;
-	FollowTime = 0.f;
 }
 
 void ARumbleBallUEPlayerController::SetupInputComponent()
 {
-	// set up gameplay key bindings
 	Super::SetupInputComponent();
 
-	// Only set up input on local player controllers
-	if (IsLocalPlayerController())
+	// 로컬 플레이어 컨트롤러만 입력을 받는다
+	if (!IsLocalPlayerController())
 	{
-		// Add Input Mapping Context
-		if (UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(GetLocalPlayer()))
-		{
-			Subsystem->AddMappingContext(DefaultMappingContext, 0);
-		}
-
-		// Set up action bindings
-		if (UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(InputComponent))
-		{
-			// Setup mouse input events
-			EnhancedInputComponent->BindAction(SetDestinationClickAction, ETriggerEvent::Started, this, &ARumbleBallUEPlayerController::OnInputStarted);
-			EnhancedInputComponent->BindAction(SetDestinationClickAction, ETriggerEvent::Triggered, this, &ARumbleBallUEPlayerController::OnSetDestinationTriggered);
-			EnhancedInputComponent->BindAction(SetDestinationClickAction, ETriggerEvent::Completed, this, &ARumbleBallUEPlayerController::OnSetDestinationReleased);
-			EnhancedInputComponent->BindAction(SetDestinationClickAction, ETriggerEvent::Canceled, this, &ARumbleBallUEPlayerController::OnSetDestinationReleased);
-
-			// Setup touch input events
-			EnhancedInputComponent->BindAction(SetDestinationTouchAction, ETriggerEvent::Started, this, &ARumbleBallUEPlayerController::OnInputStarted);
-			EnhancedInputComponent->BindAction(SetDestinationTouchAction, ETriggerEvent::Triggered, this, &ARumbleBallUEPlayerController::OnTouchTriggered);
-			EnhancedInputComponent->BindAction(SetDestinationTouchAction, ETriggerEvent::Completed, this, &ARumbleBallUEPlayerController::OnTouchReleased);
-			EnhancedInputComponent->BindAction(SetDestinationTouchAction, ETriggerEvent::Canceled, this, &ARumbleBallUEPlayerController::OnTouchReleased);
-		}
-		else
-		{
-			UE_LOG(LogRumbleBallUE, Error, TEXT("'%s' Failed to find an Enhanced Input Component! This template is built to use the Enhanced Input system. If you intend to use the legacy system, then you will need to update this C++ file."), *GetNameSafe(this));
-		}
+		return;
 	}
-}
 
-void ARumbleBallUEPlayerController::OnInputStarted()
-{
-	StopMovement();
-}
-
-void ARumbleBallUEPlayerController::OnSetDestinationTriggered()
-{
-	// We flag that the input is being pressed
-	FollowTime += GetWorld()->GetDeltaSeconds();
-	
-	// We look for the location in the world where the player has pressed the input
-	FHitResult Hit;
-	bool bHitSuccessful = false;
-	if (bIsTouch)
+	if (UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(GetLocalPlayer()))
 	{
-		bHitSuccessful = GetHitResultUnderFinger(ETouchIndex::Touch1, ECollisionChannel::ECC_Visibility, true, Hit);
+		Subsystem->AddMappingContext(DefaultMappingContext, 0);
+	}
+
+	if (UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(InputComponent))
+	{
+		EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &ARumbleBallUEPlayerController::Move);
+		EnhancedInputComponent->BindAction(StickAimAction, ETriggerEvent::Triggered, this, &ARumbleBallUEPlayerController::StickAim);
+
+		// 누르고 있어도 한 번만 대시하도록 Started에 바인딩
+		EnhancedInputComponent->BindAction(DashAction, ETriggerEvent::Started, this, &ARumbleBallUEPlayerController::Dash);
 	}
 	else
 	{
-		bHitSuccessful = GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, true, Hit);
-	}
-
-	// If we hit a surface, cache the location
-	if (bHitSuccessful)
-	{
-		CachedDestination = Hit.Location;
-	}
-	
-	// Move towards mouse pointer or touch
-	APawn* ControlledPawn = GetPawn();
-	if (ControlledPawn != nullptr)
-	{
-		FVector WorldDirection = (CachedDestination - ControlledPawn->GetActorLocation()).GetSafeNormal();
-		ControlledPawn->AddMovementInput(WorldDirection, 1.0, false);
+		UE_LOG(LogRumbleBallUE, Error, TEXT("'%s' Enhanced Input Component를 찾지 못했습니다. 이 컨트롤러는 Enhanced Input 전용입니다."), *GetNameSafe(this));
 	}
 }
 
-void ARumbleBallUEPlayerController::OnSetDestinationReleased()
+void ARumbleBallUEPlayerController::PlayerTick(float DeltaTime)
 {
-	// If it was a short press
-	if (FollowTime <= ShortPressThreshold)
+	Super::PlayerTick(DeltaTime);
+
+	UpdateMouseAim();
+}
+
+FVector ARumbleBallUEPlayerController::InputToWorld(const FVector2D& Input) const
+{
+	// 화면 위쪽 = 카메라 전방, 화면 오른쪽 = 카메라 우측 (수평 성분만)
+	const double CameraYaw = PlayerCameraManager ? PlayerCameraManager->GetCameraRotation().Yaw : 0.0;
+	const FRotationMatrix YawMatrix(FRotator(0.0, CameraYaw, 0.0));
+	return YawMatrix.GetUnitAxis(EAxis::X) * Input.Y + YawMatrix.GetUnitAxis(EAxis::Y) * Input.X;
+}
+
+void ARumbleBallUEPlayerController::Move(const FInputActionValue& Value)
+{
+	if (APawn* ControlledPawn = GetPawn())
 	{
-		// We move there and spawn some particles
-		UAIBlueprintHelperLibrary::SimpleMoveToLocation(this, CachedDestination);
-		UNiagaraFunctionLibrary::SpawnSystemAtLocation(this, FXCursor, CachedDestination, FRotator::ZeroRotator, FVector(1.f, 1.f, 1.f), true, true, ENCPoolMethod::None, true);
+		// 스틱의 아날로그 크기를 살리기 위해 정규화하지 않고 길이만 1로 자른다
+		ControlledPawn->AddMovementInput(InputToWorld(Value.Get<FVector2D>()).GetClampedToMaxSize(1.0f));
+	}
+}
+
+void ARumbleBallUEPlayerController::StickAim(const FInputActionValue& Value)
+{
+	const FVector Direction = InputToWorld(Value.Get<FVector2D>()).GetSafeNormal2D();
+	if (Direction.IsNearlyZero())
+	{
+		return;
 	}
 
-	FollowTime = 0.f;
+	SetControlRotation(Direction.Rotation());
+	bUsingStickAim = true;
+	SetShowMouseCursor(false);
 }
 
-// Triggered every frame when the input is held down
-void ARumbleBallUEPlayerController::OnTouchTriggered()
+void ARumbleBallUEPlayerController::UpdateMouseAim()
 {
-	bIsTouch = true;
-	OnSetDestinationTriggered();
+	// 마우스가 움직이면 스틱 조준에서 마우스 조준으로 돌아온다
+	float MouseX = 0.0f;
+	float MouseY = 0.0f;
+	if (GetMousePosition(MouseX, MouseY) && !FVector2D(MouseX, MouseY).Equals(LastMousePosition, 1.0f))
+	{
+		LastMousePosition = FVector2D(MouseX, MouseY);
+		if (bUsingStickAim)
+		{
+			bUsingStickAim = false;
+			SetShowMouseCursor(true);
+		}
+	}
+
+	const APawn* ControlledPawn = GetPawn();
+	if (bUsingStickAim || !ControlledPawn)
+	{
+		return;
+	}
+
+	// 커서 광선을 캐릭터 높이의 수평면과 교차시킨다. 충돌 채널 설정 없이 어디서든 동작한다.
+	FVector RayOrigin;
+	FVector RayDirection;
+	if (!DeprojectMousePositionToWorld(RayOrigin, RayDirection) || FMath::IsNearlyZero(RayDirection.Z))
+	{
+		return;
+	}
+
+	const FVector PawnLocation = ControlledPawn->GetActorLocation();
+	const FVector AimPoint = FMath::LinePlaneIntersection(RayOrigin, RayOrigin + RayDirection, FPlane(PawnLocation, FVector::UpVector));
+	const FVector Direction = (AimPoint - PawnLocation).GetSafeNormal2D();
+
+	// 커서가 캐릭터 바로 위에 있으면 방향이 불안정하므로 이전 방향을 유지한다
+	if (!Direction.IsNearlyZero())
+	{
+		SetControlRotation(Direction.Rotation());
+	}
 }
 
-void ARumbleBallUEPlayerController::OnTouchReleased()
+void ARumbleBallUEPlayerController::Dash()
 {
-	bIsTouch = false;
-	OnSetDestinationReleased();
+	ARumbleBallUECharacter* PlayerCharacter = Cast<ARumbleBallUECharacter>(GetPawn());
+	if (!PlayerCharacter)
+	{
+		return;
+	}
+
+	FVector Direction = PlayerCharacter->GetLastMovementInputVector().GetSafeNormal2D();
+	if (Direction.IsNearlyZero())
+	{
+		Direction = GetControlRotation().Vector().GetSafeNormal2D();
+	}
+
+	PlayerCharacter->Dash(Direction);
 }

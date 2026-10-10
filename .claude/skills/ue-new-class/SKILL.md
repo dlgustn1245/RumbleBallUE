@@ -9,19 +9,20 @@ argument-hint: <클래스 이름> [부모 클래스] [폴더]
 ## 1. 만들기 전에 확인
 
 - 같은 역할의 클래스가 이미 있는지 `Source/RumbleBallUE`를 Grep한다. 있으면 그 클래스를 확장한다.
+  - 플레이어 입력·조준은 `ARumbleBallUEPlayerController`, 플레이어 이동 동작은 `ARumbleBallUECharacter`, 게임 규칙은 `ARumbleBallUEGameMode`다. 이런 기능은 새 클래스를 만들지 말고 이 클래스들에 추가한다.
 - `Variant_TwinStick`에 비슷한 구현(스포너, 투사체, 픽업, 대시)이 있으면 구조를 참고한다. 템플릿 파일 자체는 고치지 않는다.
 
 ## 2. 이름 · 부모 · 위치
 
 이름은 `RB` + 기능 이름이고, 그 앞에 UE 타입 접두어를 붙인다: `A`(Actor), `U`(UObject/Component/Widget/Subsystem), `F`(struct), `E`(enum), `I`(interface).
-파일 이름에는 타입 접두어를 뺀다(`ARBEnemy` → `RBEnemy.h`/`RBEnemy.cpp`). 파일은 기능 폴더(`Core/`, `Player/`, `Enemy/`, `Weapon/`, `Progression/`, `Stage/`, `UI/`)에 둔다.
+파일 이름에는 타입 접두어를 뺀다(`ARBEnemy` → `RBEnemy.h`/`RBEnemy.cpp`). 파일은 기능 폴더(`Core/`, `Enemy/`, `Weapon/`, `Progression/`, `Stage/`, `UI/`)에 둔다.
 
 부모는 수백 개씩 생기는지가 기준이다. 뱀서라이크는 대량 객체가 성능을 좌우한다.
 
 | 용도 | 부모 | 이유 |
 |------|------|------|
 | 대량 스폰되는 적, 투사체, 경험치 보석 | `AActor` + 최소 컴포넌트 | `ACharacter`/`CharacterMovement`/AIController는 개당 비용이 커서 500마리에서 프레임이 무너진다 |
-| 플레이어 | `ACharacter` | 1개뿐이라 CharacterMovement의 편의 기능이 이득이다 |
+| 플레이어 | 새로 만들지 않음: 기존 `ARumbleBallUECharacter`(`ACharacter`) 확장 | 1개뿐이라 CharacterMovement의 편의 기능이 이득이다 |
 | 적 일괄 이동, 오브젝트 풀, 스폰 관리 | `UTickableWorldSubsystem` | 레벨에 배치하지 않아도 월드마다 자동 생성되고, Tick 한 번으로 전체를 처리한다 |
 | 여러 액터가 공유하는 기능(체력, 자석 반경) | `UActorComponent` | 상속 대신 조합 |
 | 무기·캐릭터 정의 같은 정적 데이터 묶음 | `UPrimaryDataAsset` | 에디터에서 편집하고, 메시나 이펙트 참조를 담을 수 있다 |

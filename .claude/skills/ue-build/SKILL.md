@@ -21,8 +21,10 @@ powershell -File .claude/skills/ue-build/scripts/build.ps1 -Target RumbleBallUE 
 | 2 | 에디터 실행 중이라 빌드 거부 | 빌드하지 말고 사용자에게 요청 |
 
 종료 코드 2일 때는 사용자에게 다음 둘 중 하나를 요청한다.
-- **에디터를 닫는다**: 헤더, `UCLASS`/`UPROPERTY`/`UFUNCTION`을 바꿨다면 이쪽을 권한다. Live Coding은 리플렉션 변경을 안전하게 반영하지 못한다.
-- **에디터에서 Live Coding을 실행한다**(Ctrl+Alt+F11): `.cpp` 함수 본문만 바꿨을 때 쓴다.
+- **에디터에서 Live Coding을 실행한다**(Ctrl+Alt+F11 또는 오른쪽 아래 Compile 버튼): `.cpp`만 바꿨을 때 쓴다. 헤더나 `UPROPERTY`를 바꿨더라도, 그 클래스를 쓰는 BP나 레벨 액터가 아직 없다면 쓸 수 있다. `.uasset`에서 `/Script/RumbleBallUE.<클래스명>` 문자열로 확인한다.
+- **에디터를 닫는다**: 리플렉션을 바꾼 클래스의 인스턴스가 이미 있으면 이쪽을 권한다. 재인스턴싱이 불안정하기 때문이다.
+
+Live Coding을 썼다면 사용자에게 꼭 알린다. 다음에 에디터를 열기 전에 이 스크립트로 빌드해야 한다. Live Coding 패치는 메모리에만 적용되므로, 빌드 없이 열면 옛 DLL이 로드되고 BP에 저장한 새 프로퍼티 값이 사라질 수 있다.
 
 에디터 프로세스를 직접 종료하지 않는다. 저장하지 않은 레벨·블루프린트 작업이 사라진다.
 

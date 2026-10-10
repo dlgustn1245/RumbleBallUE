@@ -64,6 +64,11 @@ description: Claude가 직접 편집할 수 없는 언리얼 에디터 작업(�
 ## 자주 쓰는 작업
 
 - **C++ 클래스의 BP 자식**: 위 예시대로 만든다. `UCLASS(abstract)` 클래스는 BP 자식을 만들어야 쓸 수 있다.
+- **기존 BP를 C++ 클래스 아래로 옮기기**:
+  1. BP를 열고 **File → Reparent Blueprint**로 부모를 바꾼다.
+  2. C++로 옮긴 기능이 BP 그래프에도 남아 있으면 그 노드를 지운다. 그대로 두면 입력이 두 번 처리된다.
+  3. C++ 부모와 BP에 같은 역할의 컴포넌트(카메라 등)가 둘 다 있으면 하나를 지운다.
+  4. C++ 생성자에서 바꾼 기본값(`bUseControllerRotationYaw` 등)은, BP가 그 값을 따로 저장해 두었다면 반영되지 않는다. **Class Defaults**에서 직접 맞추거나 옆의 되돌리기 화살표(↺)를 누르게 안내한다.
 - **입력 추가**:
   1. `IA_` 에셋을 만들고 Value Type을 정한다. 이동은 **Axis2D**, 대시와 상호작용은 **Digital(bool)**이다.
   2. `IMC_`에 키를 매핑한다. WASD 이동은 **Swizzle Input Axis Values**와 **Negate** 모디파이어로 구성한다.

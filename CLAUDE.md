@@ -18,7 +18,8 @@ powershell -File .claude/skills/ue-test/scripts/run-tests.ps1
 ```
 
 - 에디터가 열려 있으면 Live Coding 때문에 빌드가 거부된다(스크립트 종료 코드 2). 이 경우 사용자에게 에디터를 닫거나 Live Coding(Ctrl+Alt+F11)을 실행해 달라고 요청한다. 에디터 프로세스를 임의로 종료하지 않는다.
-- 헤더, `UPROPERTY`/`UFUNCTION`, 새 클래스 변경은 Live Coding으로 반영되지 않을 수 있다. 에디터를 닫고 풀 빌드한다.
+- Live Coding(재인스턴싱 켜짐)은 헤더, `UPROPERTY`/`UFUNCTION` 변경도 반영한다. 다만 그 클래스의 인스턴스(BP, 레벨 액터)가 이미 있으면 불안정하므로, 그때는 에디터를 닫고 풀 빌드한다.
+- Live Coding 결과는 실행 중인 에디터의 메모리에만 적용된다. 에디터를 닫았다가 다시 열기 전에 반드시 빌드한다. 빌드 없이 열면 옛 DLL이 로드되어 BP에 저장한 새 프로퍼티 값이 인식되지 않고, 그 상태로 저장하면 값이 사라진다.
 - Windows 패키징은 `/ue-package`로 한다.
 - 완료 기준: C++ 변경은 에디터 타깃 빌드 성공까지 확인한다. 빌드하지 못했거나 PIE 확인이 필요하면 그 사실을 그대로 보고한다.
 
@@ -36,20 +37,30 @@ powershell -File .claude/skills/ue-test/scripts/run-tests.ps1
 ## 코드 구조
 
 - 모듈은 `Source/RumbleBallUE/` 하나(Runtime)다. 로그 카테고리는 `LogRumbleBallUE`([RumbleBallUE.h](Source/RumbleBallUE/RumbleBallUE.h)).
-- 신규 게임 코드는 모듈 루트 아래 기능별 폴더에 둔다: `Core/`(GameMode, 런·스테이지 타이머), `Player/`, `Enemy/`, `Weapon/`, `Progression/`(경험치, 레벨업, 토메, 아이템), `Stage/`(보스 포탈, 상자, 신전), `UI/`, `Tests/`.
+- **기본 클래스**(모듈 루트)는 이 게임의 플레이어 뼈대다. 직접 수정하며, 이름은 그대로 유지한다.
+
+  | 클래스 | 역할 |
+  |--------|------|
+  | `ARumbleBallUEPlayerController` | 입력 담당: WASD·왼쪽 스틱 이동(화면 기준), 마우스 커서·오른쪽 스틱 조준(컨트롤 회전), 대시 입력 |
+  | `ARumbleBallUECharacter` | 조준 방향(컨트롤 회전 yaw) 바라보기, 대시 동작(`Dash`). 카메라는 BP 컴포넌트로 구성 |
+  | `ARumbleBallUEGameMode` | 아직 비어 있음. 런 타이머 등이 들어갈 자리 |
+
+- **블루프린트 연결**: `Lvl_TopDown`의 World Settings → GameMode Override = `BP_TopDownGameMode` → Pawn `BP_TopDownCharacter`, Controller `BP_TopDownController`(모두 `Content/TopDown/Blueprints`).
+  - 이 BP들은 원래 C++를 상속하지 않는 BP 전용 템플릿이었다. `BP_TopDownController` → `ARumbleBallUEPlayerController`, `BP_TopDownCharacter` → `ARumbleBallUECharacter`로 부모를 바꿔 쓴다.
+  - 레벨이 GameMode를 직접 지정하므로, [DefaultEngine.ini](Config/DefaultEngine.ini)의 기본 게임모드를 바꿔도 이 레벨에는 적용되지 않는다.
+- **C++ 수정이 실제로 반영되는지 먼저 확인한다**: 그 C++ 클래스를 상속하는 BP가 레벨에서 쓰이고 있어야 한다. `.uasset`에서 `/Script/RumbleBallUE` 문자열을 찾거나, BP 에디터의 Parent class를 보면 된다.
+- 신규 게임 코드는 모듈 루트 아래 기능별 폴더에 둔다: `Core/`(런·스테이지 타이머), `Enemy/`, `Weapon/`, `Progression/`(경험치, 레벨업, 토메, 아이템), `Stage/`(보스 포탈, 상자, 신전), `UI/`, `Tests/`.
 - 하위 폴더 헤더는 모듈 루트 기준 경로로 include한다(`#include "Enemy/RBEnemy.h"`).
 - 신규 게임 에셋은 `Content/RumbleBall/` 아래에 둔다.
-- 템플릿 코드:
-  - `RumbleBallUECharacter/GameMode/PlayerController`와 `Variant_Strategy`는 이 게임과 무관하다.
+- 템플릿 코드(`Variant_*`)는 수정하지 않는다. 삭제는 사용자 승인 후에만 한다.
   - `Variant_TwinStick`은 탑뷰 이동, 대시, 스포너, 투사체, 픽업 구현의 참고용이다. 단, 적 1마리당 `ACharacter`+`AIController`+StateTree 구조라 `NPCCap=20` 규모용이다. 대량 적 구현에 그대로 쓰지 않는다.
-  - 템플릿 파일은 수정하지 않는다. 필요한 부분은 `RB` 클래스로 새로 작성한다. 템플릿 삭제는 사용자 승인 후에만 한다.
-- 현재 기본 맵과 게임모드는 템플릿 것(`Lvl_TopDown`, `BP_TopDownGameMode`, [DefaultEngine.ini](Config/DefaultEngine.ini))이다.
+  - `Variant_Strategy`는 이 게임과 무관하다.
 
 ## 코딩 컨벤션
 
 - Epic C++ Coding Standard를 따른다. 탭 들여쓰기를 쓴다.
-- 주석은 한국어로, 템플릿과 같은 `/** */` 형식으로 쓴다. 템플릿 파일의 기존 영어 주석은 그대로 둔다. 한국어가 깨지지 않도록 소스 파일은 UTF-8로 저장한다.
-- 신규 클래스 접두어는 `RB`다: `ARBEnemy`, `URBWeaponData`, `FRBUpgradeRow`.
+- 주석은 한국어로, 템플릿과 같은 `/** */` 형식으로 쓴다. 고치지 않은 기존 영어 주석은 그대로 둔다. 한국어가 깨지지 않도록 소스 파일은 UTF-8로 저장한다.
+- 신규 클래스 접두어는 `RB`다: `ARBEnemy`, `URBWeaponData`, `FRBUpgradeRow`. 기존 `RumbleBallUE*` 기본 클래스는 이름을 유지한다.
 - UObject 멤버 포인터는 `UPROPERTY()` + `TObjectPtr<>`로 둔다. 헤더에는 전방 선언만 하고 include는 `.cpp`에 한다.
 - 튜닝 값은 `UPROPERTY(EditAnywhere, Category="...", meta=(ClampMin=..., Units="..."))`로 노출한다(템플릿 패턴).
 - C++과 Blueprint 분담:
@@ -85,4 +96,4 @@ powershell -File .claude/skills/ue-test/scripts/run-tests.ps1
 - `.uasset`/`.umap`은 바이너리(Git LFS)라 직접 편집할 수 없다. Blueprint, 레벨, 위젯 작업은 사용자에게 에디터 조작 단계로 안내한다.
 - 에셋을 파일시스템에서 이동, 이름 변경, 삭제하지 않는다(참조가 깨진다). 에디터에서 처리하고 Fix Up Redirectors를 실행한다.
 - `Binaries/`, `Intermediate/`, `Saved/`, `DerivedDataCache/`는 생성물이므로 수정하거나 커밋하지 않는다.
-- 커밋 메시지는 `feat:`/`fix:`/`refactor:`/`docs:`/`chore:` + 한국어 요약으로 쓴다(기존 히스토리 형식).
+- 커밋 메시지는 `feat:`/`fix:`/`refactor:`/`doc:`/`chore:` + 한국어 요약으로 쓴다(기존 히스토리 형식).

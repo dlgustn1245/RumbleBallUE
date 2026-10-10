@@ -69,10 +69,15 @@ flowchart LR
 | 동작 | 키보드 · 마우스 | 게임패드 |
 |------|----------------|----------|
 | 이동 | WASD | 왼쪽 스틱 |
+| 조준 | 마우스 커서 | 오른쪽 스틱 |
 | 대시 | Space | A |
 | 상호작용(상자·신전·포탈) | E | X |
 | 강화 선택 | 마우스 클릭 / 1·2·3 | 십자키 + A |
 | 일시정지 | Esc | Start |
+
+- **이동**은 화면 기준입니다. W를 누르면 화면 위쪽으로 갑니다.
+- **조준**: 캐릭터는 항상 조준 방향을 바라봅니다. 대부분의 무기는 자동으로 적을 찾지만, 방향성 무기(샷건류 등)는 조준 방향으로 발사됩니다. 마우스를 움직이면 마우스 조준, 오른쪽 스틱을 기울이면 스틱 조준으로 자동 전환됩니다.
+- **대시**: 이동 중이면 이동 방향으로, 멈춰 있으면 조준 방향으로 짧게 돌진합니다. 재사용 대기 시간이 있습니다.
 
 ## 개발 환경
 
@@ -95,8 +100,9 @@ git clone https://github.com/dlgustn1245/RumbleBallUE.git
 
 ```
 Source/RumbleBallUE/       게임 C++ 모듈
-  Core/                    GameMode, 런·스테이지 타이머
-  Player/ Enemy/           플레이어, 적, 적 매니저
+  RumbleBallUE*.h/.cpp     기본 클래스: 플레이어 컨트롤러(입력·조준), 캐릭터(대시), 게임모드
+  Core/                    런·스테이지 타이머
+  Enemy/                   적, 적 매니저
   Weapon/                  자동 공격 무기
   Progression/             경험치, 레벨업, 토메, 아이템
   Stage/                   보스 포탈, 상자, 신전, 항아리
@@ -105,6 +111,7 @@ Source/RumbleBallUE/       게임 C++ 모듈
   Variant_TwinStick/       템플릿: 탑뷰 이동·대시·스포너 참고용
   Variant_Strategy/        템플릿: 미사용
 Content/RumbleBall/        게임 에셋
+Content/TopDown/           현재 쓰는 레벨(Lvl_TopDown)과 플레이어 BP (C++ 기본 클래스를 상속)
 Design/Balance/            밸런스 원본 CSV (DataTable로 reimport)
 Config/                    프로젝트 설정
 .claude/skills/            Claude Code 프로젝트 스킬 (빌드, 테스트, 클래스 생성 등)

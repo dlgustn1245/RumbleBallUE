@@ -3,19 +3,17 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Templates/SubclassOf.h"
 #include "GameFramework/PlayerController.h"
 #include "RumbleBallUEPlayerController.generated.h"
 
-class UNiagaraSystem;
+struct FInputActionValue;
 class UInputMappingContext;
 class UInputAction;
 
-DECLARE_LOG_CATEGORY_EXTERN(LogTemplateCharacter, Log, All);
-
 /**
- *  Player controller for a top-down perspective game.
- *  Implements point and click based controls
+ *  탑뷰 플레이어 컨트롤러.
+ *  WASD(왼쪽 스틱)로 화면 기준 이동하고 Space(A)로 대시한다.
+ *  마우스 커서(오른쪽 스틱) 방향을 컨트롤 회전으로 넘겨 캐릭터가 그쪽을 바라보게 한다.
  */
 UCLASS(abstract)
 class ARumbleBallUEPlayerController : public APlayerController
@@ -24,55 +22,53 @@ class ARumbleBallUEPlayerController : public APlayerController
 
 protected:
 
-	/** Time Threshold to know if it was a short press */
+	/** 플레이어 입력 매핑 */
 	UPROPERTY(EditAnywhere, Category="Input")
-	float ShortPressThreshold;
+	TObjectPtr<UInputMappingContext> DefaultMappingContext;
 
-	/** FX Class that we will spawn when clicking */
+	/** 이동 입력 (Axis2D, X = 화면 오른쪽, Y = 화면 위쪽) */
 	UPROPERTY(EditAnywhere, Category="Input")
-	UNiagaraSystem* FXCursor;
+	TObjectPtr<UInputAction> MoveAction;
 
-	/** MappingContext */
+	/** 게임패드 조준 입력 (Axis2D, 오른쪽 스틱) */
 	UPROPERTY(EditAnywhere, Category="Input")
-	UInputMappingContext* DefaultMappingContext;
-	
-	/** Jump Input Action */
+	TObjectPtr<UInputAction> StickAimAction;
+
+	/** 대시 입력 */
 	UPROPERTY(EditAnywhere, Category="Input")
-	UInputAction* SetDestinationClickAction;
+	TObjectPtr<UInputAction> DashAction;
 
-	/** Jump Input Action */
-	UPROPERTY(EditAnywhere, Category="Input")
-	UInputAction* SetDestinationTouchAction;
+	/** true면 오른쪽 스틱 조준 중, false면 마우스 조준 중 */
+	bool bUsingStickAim = false;
 
-	/** True if the controlled character should navigate to the mouse cursor. */
-	uint32 bMoveToMouseCursor : 1;
-
-	/** Set to true if we're using touch input */
-	uint32 bIsTouch : 1;
-
-	/** Saved location of the character movement destination */
-	FVector CachedDestination;
-
-	/** Time that the click input has been pressed */
-	float FollowTime = 0.0f;
+	/** 마우스 움직임 감지용 직전 커서 위치 */
+	FVector2D LastMousePosition = FVector2D::ZeroVector;
 
 public:
 
-	/** Constructor */
+	/** 생성자 */
 	ARumbleBallUEPlayerController();
 
 protected:
 
-	/** Initialize input bindings */
+	/** 입력 매핑 등록과 액션 바인딩 */
 	virtual void SetupInputComponent() override;
-	
-	/** Input handlers */
-	void OnInputStarted();
-	void OnSetDestinationTriggered();
-	void OnSetDestinationReleased();
-	void OnTouchTriggered();
-	void OnTouchReleased();
 
+	/** 매 프레임 마우스 조준 갱신 */
+	virtual void PlayerTick(float DeltaTime) override;
+
+	/** 이동 입력 처리 */
+	void Move(const FInputActionValue& Value);
+
+	/** 오른쪽 스틱 조준 입력 처리 */
+	void StickAim(const FInputActionValue& Value);
+
+	/** 대시 입력 처리. 이동 중이면 이동 방향, 서 있으면 조준 방향으로 대시한다 */
+	void Dash();
+
+	/** 마우스 커서가 가리키는 지면 쪽으로 조준 방향을 갱신 */
+	void UpdateMouseAim();
+
+	/** 화면 기준 2D 입력(X = 오른쪽, Y = 위쪽)을 카메라 yaw 기준 월드 수평 방향으로 변환 */
+	FVector InputToWorld(const FVector2D& Input) const;
 };
-
-
